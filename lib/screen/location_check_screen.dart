@@ -124,7 +124,7 @@ class _LocationCheckScreenState extends State<LocationCheckScreen> {
 
               // Description
               Text(
-                'FinnERP needs access to your location to track work activities and provide accurate job management.',
+                'SmartForce needs access to your location to track work activities and provide accurate job management.',
                 style: TextStyle(
                   fontSize: 16,
                   color: AppColors.text.withOpacity(0.7),

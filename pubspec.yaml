@@ -1,5 +1,5 @@
-name: finnerp
-description: "FinnERP is ERP Software System for Finnish small and medium-sized enterprises to support their business processes & cooperate goals."
+name: smartforce
+description: "SmartForce is the employees client app for SmartForce ERP Software System to SmartForce group Finland Oy to support their business processes & cooperate goals."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev

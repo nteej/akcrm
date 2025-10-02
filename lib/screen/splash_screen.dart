@@ -57,7 +57,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             const SizedBox(height: 40),
             Text(
-              'FinnERP',
+              'SmartForce Group Finland Oy',
               style: TextStyle(
                 fontSize: 40,
                 fontWeight: FontWeight.bold,
