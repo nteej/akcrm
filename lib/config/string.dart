@@ -1,6 +1,6 @@
 // Centralized string constants for the app
 class Text {
-  static const String appName = 'Akaram Oy';
+  static const String appName = 'Smartforce Oy';
   static const String loginTitle = 'Login';
   static const String registerTitle = 'Register';
   static const String homeTitle = 'Home';

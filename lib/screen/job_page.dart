@@ -12,6 +12,8 @@ import '../models/job.dart';
 import '../helper/dio.dart';
 import '../config/app_colors.dart';
 import '../providers/job_provider.dart';
+import '../services/location_tracking_service.dart';
+import '../providers/auth.dart';
 
 class JobPage extends StatefulWidget {
   const JobPage({super.key});
@@ -28,6 +30,7 @@ class _JobPageState extends State<JobPage> {
   List<Job> jobs = [];
   bool isLoading = true;
   final storage = FlutterSecureStorage();
+  final LocationTrackingService _locationTrackingService = LocationTrackingService();
 
   @override
   void initState() {
@@ -383,6 +386,16 @@ class _JobPageState extends State<JobPage> {
                               _locationUpdates.add(latLong);
                             });
                           });
+
+                      // Start location tracking service (4 times per minute)
+                      final authProvider = context.read<Auth>();
+                      final deviceId = await authProvider.getDeviceId();
+                      await _locationTrackingService.startTracking(
+                        jobId: jobId!,
+                        userId: userId,
+                        deviceId: deviceId,
+                      );
+
                       if (mounted) {
                         Navigator.of(context).pop();
                       }
@@ -432,12 +445,8 @@ class _JobPageState extends State<JobPage> {
     });
 
     final endTime = DateTime.now();
-    final fuelController = TextEditingController(
-      text: currentJob.fuelConsumption.toString(),
-    );
-    final fuelPriceController = TextEditingController(
-      text: currentJob.fuelPrice.toString(),
-    );
+    final fuelController = TextEditingController();
+    final fuelPriceController = TextEditingController();
 
     await showDialog(
       context: context,
@@ -465,23 +474,13 @@ class _JobPageState extends State<JobPage> {
                   enabled: false,
                 ),
                 TextFormField(
-                  initialValue: startTime.toString(),
+                  initialValue: DateFormat('yyyy-MM-dd HH:mm').format(startTime),
                   decoration: InputDecoration(labelText: 'Started At'),
                   enabled: false,
                 ),
                 TextFormField(
-                  initialValue: endTime.toString(),
+                  initialValue: DateFormat('yyyy-MM-dd HH:mm').format(endTime),
                   decoration: InputDecoration(labelText: 'Finished At'),
-                  enabled: false,
-                ),
-                TextFormField(
-                  initialValue: _startLatLong ?? '',
-                  decoration: InputDecoration(labelText: 'Start LatLong'),
-                  enabled: false,
-                ),
-                TextFormField(
-                  initialValue: _endLatLong ?? '',
-                  decoration: InputDecoration(labelText: 'End LatLong'),
                   enabled: false,
                 ),
                 TextFormField(
@@ -504,6 +503,20 @@ class _JobPageState extends State<JobPage> {
           actions: [
             ElevatedButton(
               onPressed: () async {
+                // Validate fuel fields
+                final fuelConsumption = fuelController.text.trim();
+                final fuelPrice = fuelPriceController.text.trim();
+
+                if ((fuelConsumption.isNotEmpty && fuelPrice.isEmpty) ||
+                    (fuelConsumption.isEmpty && fuelPrice.isNotEmpty)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Both Fuel Consumption and Fuel Price must be filled or both empty'),
+                    ),
+                  );
+                  return;
+                }
+
                 try {
                   final token = await storage.read(key: 'auth');
                   final userId = await storage.read(key: 'user_id');
@@ -513,11 +526,13 @@ class _JobPageState extends State<JobPage> {
                     'finished_at': dateFormat.format(endTime),
                     'end_latlong': _endLatLong ?? '',
                     'fuel_consumed':
-                        double.tryParse(fuelController.text) ??
-                        currentJob.fuelConsumption,
+                        fuelConsumption.isNotEmpty
+                            ? double.tryParse(fuelConsumption)
+                            : null,
                     'fuel_price':
-                        double.tryParse(fuelPriceController.text) ??
-                        currentJob.fuelPrice,
+                        fuelPrice.isNotEmpty
+                            ? double.tryParse(fuelPrice)
+                            : null,
                     'user_id': userId,
                   };
                   log('PUT /runners/$jobId payload: $payload');
@@ -550,11 +565,13 @@ class _JobPageState extends State<JobPage> {
                   vehicle: currentJob.vehicle,
                   vendor: currentJob.vendor,
                   fuelPrice:
-                      double.tryParse(fuelPriceController.text) ??
-                      currentJob.fuelPrice,
+                      fuelPrice.isNotEmpty
+                          ? double.tryParse(fuelPrice) ?? 0.0
+                          : 0.0,
                   fuelConsumption:
-                      double.tryParse(fuelController.text) ??
-                      currentJob.fuelConsumption,
+                      fuelConsumption.isNotEmpty
+                          ? double.tryParse(fuelConsumption) ?? 0.0
+                          : 0.0,
                 );
 
                 if (mounted) {
@@ -565,6 +582,8 @@ class _JobPageState extends State<JobPage> {
                   Navigator.of(context).pop();
                 }
                 _locationSubscription?.cancel();
+                // Stop location tracking service
+                _locationTrackingService.stopTracking();
               },
               child: Text('Submit'),
             ),
@@ -577,6 +596,7 @@ class _JobPageState extends State<JobPage> {
   @override
   void dispose() {
     _locationSubscription?.cancel();
+    _locationTrackingService.dispose();
     super.dispose();
   }
 
@@ -746,40 +766,136 @@ class _JobPageState extends State<JobPage> {
         backgroundColor: AppColors.background,
         appBar: AppBar(
           backgroundColor: AppColors.appBar,
-          title: Text('Duty List', style: TextStyle(color: AppColors.text)),
+          title: Consumer<JobProvider>(
+            builder: (context, jobProvider, child) {
+              return Text(
+                jobProvider.isJobRunning
+                    ? 'Duty List - ${jobProvider.getElapsedTimeString()}'
+                    : 'Duty List',
+                style: TextStyle(color: AppColors.text),
+              );
+            },
+          ),
         ),
-        body: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.yellow[400],
-                      foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
-                      ),
-                      textStyle: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
+        body: Consumer<JobProvider>(
+          builder: (context, jobProvider, child) {
+            return Column(
+              children: [
+                if (jobProvider.isJobRunning)
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        Card(
+                          color: Colors.orange[200],
+                          margin: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          child: ListTile(
+                            title: Text(
+                              jobProvider.runningJob!.service,
+                              style: TextStyle(
+                                color: AppColors.text,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Started: ${DateFormat('yyyy-MM-dd HH:mm').format(jobProvider.jobStartTime!)}',
+                                  style: TextStyle(color: AppColors.text),
+                                ),
+                                Text(
+                                  'Elapsed: ${jobProvider.getElapsedTimeString()}',
+                                  style: TextStyle(
+                                    color: AppColors.text,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  'Vehicle: ${jobProvider.runningJob!.vehicle}',
+                                  style: TextStyle(color: AppColors.text),
+                                ),
+                                Text(
+                                  'Vendor: ${jobProvider.runningJob!.vendor}',
+                                  style: TextStyle(color: AppColors.text),
+                                ),
+                                SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                  children: [
+                                    if (!jobProvider.isPaused)
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.orange[400],
+                                          foregroundColor: Colors.black,
+                                        ),
+                                        onPressed: _pauseJob,
+                                        child: Text('Pause'),
+                                      ),
+                                    if (jobProvider.isPaused)
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.green[400],
+                                          foregroundColor: Colors.black,
+                                        ),
+                                        onPressed: _resumeJob,
+                                        child: Text('Resume'),
+                                      ),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red[400],
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      onPressed: _stopJob,
+                                      child: Text('Stop'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    onPressed: _startJob,
-                    child: Text('Start Job'),
+                  )
+                else
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.yellow[400],
+                                  foregroundColor: Colors.black,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
+                                  ),
+                                  textStyle: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                onPressed: _startJob,
+                                child: Text('Start Job'),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Center(child: Text('No jobs found')),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ),
-            Center(child: Text('No jobs found')),
-          ],
+              ],
+            );
+          },
         ),
       );
     }

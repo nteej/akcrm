@@ -88,7 +88,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             const SizedBox(height: 40),
             Text(
-              'Akaram Oy Finland',
+              'SmartForce Oy Finland',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.yellow[900],

@@ -1,9 +1,7 @@
 import '../../screen/job_page.dart';
-import '../../screen/google_map_page.dart';
 import '../../screen/profile_page.dart';
 import 'package:flutter/material.dart';
 import '../../screen/login_screen.dart';
-import '../../screen/posts_screen.dart';
 import '../../screen/register.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth.dart';
@@ -69,20 +67,6 @@ class _NavDrawerState extends State<NavDrawer> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: ((context) => ProfilePage())),
-                  ),
-                ),
-                ListTile(
-                  title: Text('Settings'),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: ((context) => PostsScreen())),
-                  ),
-                ),
-                ListTile(
-                  title: Text('My Location'),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: ((context) => GoogleMapPage())),
                   ),
                 ),
                 ListTile(

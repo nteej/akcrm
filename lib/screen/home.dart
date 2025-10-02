@@ -55,7 +55,7 @@ class _HomeState extends State<Home> {
           builder: (context, jobProvider, child) {
             return Column(
               children: [
-                Text('Akaram Oy', style: TextStyle(color: AppColors.text)),
+                Text('SmartForce Oy', style: TextStyle(color: AppColors.text)),
                 if (jobProvider.isJobRunning)
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
