@@ -1,3 +1,5 @@
+import 'package:finnerp/firebase_options.dart';
+import 'package:finnerp/services/notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
@@ -7,9 +9,17 @@ import 'providers/auth.dart';
 import 'providers/job_provider.dart';
 import 'screen/home.dart';
 import 'services/location_service.dart';
+import 'services/location_tracking_service.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  final NotificationService notificationService = NotificationService();
+  await notificationService.initFCM();
 
   runApp(MultiProvider(
     providers: [
@@ -56,6 +66,11 @@ class _AppInitializerState extends State<AppInitializer> {
       // Check if location services are available
       bool locationAvailable = await LocationService.isLocationAvailable();
 
+      // Initialize and resume location tracking if there's a running job
+      final locationTrackingService = LocationTrackingService();
+      await locationTrackingService.initialize();
+      await locationTrackingService.resumeTrackingIfNeeded();
+
       setState(() {
         _hasLocationAccess = locationAvailable;
         _isInitializing = false;
@@ -63,6 +78,16 @@ class _AppInitializerState extends State<AppInitializer> {
     } catch (e) {
       // If initialization fails, continue
       bool locationAvailable = await LocationService.isLocationAvailable();
+
+      // Try to resume tracking even if there was an error
+      try {
+        final locationTrackingService = LocationTrackingService();
+        await locationTrackingService.initialize();
+        await locationTrackingService.resumeTrackingIfNeeded();
+      } catch (e) {
+        // Ignore tracking resume errors
+      }
+
       setState(() {
         _hasLocationAccess = locationAvailable;
         _isInitializing = false;
@@ -105,6 +130,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final storage = FlutterSecureStorage();
+  bool _isCheckingAuth = true;
 
   Future<void> _checkLocationAccess() async {
     // Since we already passed the location check screen,
@@ -126,7 +152,13 @@ class _HomePageState extends State<HomePage> {
     if (mounted) {
       String? key = await storage.read(key: 'auth');
       if (mounted) {
-        Provider.of<Auth>(context, listen: false).attempt(key);
+        await Provider.of<Auth>(context, listen: false).attempt(key);
+        // Auth check complete, update UI
+        if (mounted) {
+          setState(() {
+            _isCheckingAuth = false;
+          });
+        }
       }
     }
   }
@@ -139,6 +171,40 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // Show loading screen while checking authentication
+    if (_isCheckingAuth) {
+      return Scaffold(
+        backgroundColor: Colors.yellow[200],
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.yellow[700]!),
+              ),
+              SizedBox(height: 24),
+              Text(
+                'SmartForce',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.yellow[900],
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Loading...',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.yellow[800],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       body: Center(
         child: Consumer<Auth>(

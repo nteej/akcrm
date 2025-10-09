@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1081955355455",
+    "project_id": "smartforce-oy",
+    "storage_bucket": "smartforce-oy.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1081955355455:android:4bea1619a6504b4edc218a",
+        "android_client_info": {
+          "package_name": "fi.finnerp.erp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAoBrt8Dh3hEbq7PFv-tAeAm62CwojFXeg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

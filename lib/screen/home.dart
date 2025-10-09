@@ -20,7 +20,7 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
   PageController? _pageController;
-  int pageINdex = 1;
+  int pageINdex = 0; // Changed from 1 to 0 to default to Dashboard
   @override
   void initState() {
     super.initState();
@@ -104,22 +104,11 @@ class _HomeState extends State<Home> {
           ),
           BottomNavigationBarItem(
             icon: Icon(
-              FeatherIcons.coffee,
+              FeatherIcons.briefcase,
               size: 30,
             ),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(
-              FeatherIcons.bookOpen,
-              size: 30,
-            ),
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(
-              FeatherIcons.user,
-              size: 30,
-            ),
-          )
+          
         ],
       ),
     );

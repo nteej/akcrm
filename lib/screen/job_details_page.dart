@@ -66,6 +66,15 @@ class JobDetailsPage extends StatelessWidget {
                 Text('${job.fuelConsumption.toStringAsFixed(2)} L', style: TextStyle(fontSize: 16, color: AppColors.text)),
               ],
             ),
+            SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.directions, color: AppColors.text),
+                SizedBox(width: 8),
+                Text('Distance: ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.text)),
+                Text(job.getDistanceFormatted(), style: TextStyle(fontSize: 16, color: AppColors.text)),
+              ],
+            ),
             SizedBox(height: 16),
             Row(
               children: [
@@ -82,24 +91,6 @@ class JobDetailsPage extends StatelessWidget {
                 SizedBox(width: 8),
                 Text('Date: ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.text)),
                 Text(dateFormat, style: TextStyle(fontSize: 16, color: AppColors.text)),
-              ],
-            ),
-            SizedBox(height: 16),
-            Row(
-              children: [
-                Icon(Icons.location_on, color: AppColors.text),
-                SizedBox(width: 8),
-                Text('Start Location: ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.text)),
-                Text(job.startLatLong, style: TextStyle(fontSize: 16, color: AppColors.text)),
-              ],
-            ),
-            SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.location_on, color: AppColors.text),
-                SizedBox(width: 8),
-                Text('End Location: ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.text)),
-                Text(job.endLatLong, style: TextStyle(fontSize: 16, color: AppColors.text)),
               ],
             ),
             SizedBox(height: 16),

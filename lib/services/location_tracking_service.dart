@@ -3,14 +3,21 @@ import 'dart:developer';
 import 'package:dio/dio.dart' as dio_lib;
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../helper/dio.dart';
+import 'background_location_service.dart';
 
 class LocationTrackingService {
-  Timer? _timer;
-  final storage = FlutterSecureStorage();
+  final storage = const FlutterSecureStorage();
+  final BackgroundLocationService _backgroundService = BackgroundLocationService();
   bool _isTracking = false;
 
   bool get isTracking => _isTracking;
+
+  /// Initialize the service (call once at app start)
+  Future<void> initialize() async {
+    await _backgroundService.initialize();
+  }
 
   /// Start tracking location with 4 calls per minute (every 15 seconds)
   Future<void> startTracking({
@@ -26,25 +33,84 @@ class LocationTrackingService {
     _isTracking = true;
     log('Starting location tracking for job $jobId');
 
+    // Persist tracking state
+    await _saveTrackingState(
+      jobId: jobId,
+      userId: userId,
+      deviceId: deviceId,
+      isTracking: true,
+    );
+
     // Send location immediately on start
     await _sendLocation(jobId: jobId, userId: userId, deviceId: deviceId);
 
-    // Send location every 15 seconds (4 times per minute)
-    _timer = Timer.periodic(Duration(seconds: 15), (timer) async {
-      if (_isTracking) {
-        await _sendLocation(jobId: jobId, userId: userId, deviceId: deviceId);
-      }
-    });
+    // Start background service
+    await _backgroundService.startTracking(
+      jobId: jobId,
+      userId: userId,
+      deviceId: deviceId,
+    );
+
+    log('Location tracking started successfully');
   }
 
   /// Stop tracking location
-  void stopTracking() {
-    if (_timer != null) {
-      _timer!.cancel();
-      _timer = null;
-    }
+  Future<void> stopTracking() async {
     _isTracking = false;
+
+    // Stop background service
+    await _backgroundService.stopTracking();
+
+    // Clear tracking state
+    await _clearTrackingState();
+
     log('Location tracking stopped');
+  }
+
+  /// Save tracking state to SharedPreferences
+  Future<void> _saveTrackingState({
+    required int jobId,
+    required String userId,
+    required String deviceId,
+    required bool isTracking,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('tracking_job_id', jobId);
+    await prefs.setString('tracking_user_id', userId);
+    await prefs.setString('tracking_device_id', deviceId);
+    await prefs.setBool('is_tracking', isTracking);
+    log('Tracking state saved: jobId=$jobId, isTracking=$isTracking');
+  }
+
+  /// Clear tracking state
+  Future<void> _clearTrackingState() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('tracking_job_id');
+    await prefs.remove('tracking_user_id');
+    await prefs.remove('tracking_device_id');
+    await prefs.setBool('is_tracking', false);
+    log('Tracking state cleared');
+  }
+
+  /// Resume tracking from saved state (call on app start)
+  Future<void> resumeTrackingIfNeeded() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isTracking = prefs.getBool('is_tracking') ?? false;
+
+    if (isTracking) {
+      final jobId = prefs.getInt('tracking_job_id');
+      final userId = prefs.getString('tracking_user_id');
+      final deviceId = prefs.getString('tracking_device_id');
+
+      if (jobId != null && userId != null && deviceId != null) {
+        log('Resuming tracking for job $jobId');
+        await startTracking(
+          jobId: jobId,
+          userId: userId,
+          deviceId: deviceId,
+        );
+      }
+    }
   }
 
   /// Send current location to API
