@@ -184,11 +184,29 @@ void onStart(ServiceInstance service) async {
       try {
         final prefs = await SharedPreferences.getInstance();
         final stillTracking = prefs.getBool('is_tracking') ?? false;
+        final isPaused = prefs.getBool('is_paused') ?? false;
         final currentJobName = prefs.getString('tracking_job_name') ?? jobName;
         final currentStartTime = prefs.getInt('tracking_job_start_time') ?? jobStartTime;
 
         if (!stillTracking) {
           timer.cancel();
+          return;
+        }
+
+        // Show paused notification if job is paused
+        if (isPaused) {
+          final pausedAt = prefs.getInt('paused_at');
+          final pausedTime = pausedAt != null
+              ? DateTime.fromMillisecondsSinceEpoch(pausedAt)
+              : DateTime.now();
+          final pauseDuration = DateTime.now().difference(pausedTime);
+          final pauseMinutes = pauseDuration.inMinutes;
+          final pauseSeconds = pauseDuration.inSeconds.remainder(60);
+
+          service.setForegroundNotificationInfo(
+            title: '⏸️ $currentJobName - PAUSED',
+            content: 'Paused for ${pauseMinutes}m ${pauseSeconds}s | Tracking stopped',
+          );
           return;
         }
 
@@ -247,13 +265,13 @@ void onStart(ServiceInstance service) async {
     errorCount++;
   }
 
-  // Send location every 15 seconds (4 times per minute)
+  // Send location every 10 seconds (6 times per minute)
   // Using Timer.periodic with extensive error handling and recovery
   // This timer runs INDEPENDENTLY of app state
-  log('⏰ Starting timer - will fire every 15 seconds');
+  log('⏰ Starting timer - will fire every 10 seconds');
   log('⏰ Timer is INDEPENDENT of app lifecycle');
 
-  Timer.periodic(const Duration(seconds: 15), (timer) async {
+  Timer.periodic(const Duration(seconds: 10), (timer) async {
     try {
       timerCount++;
       log('');
@@ -264,12 +282,34 @@ void onStart(ServiceInstance service) async {
 
       final prefs = await SharedPreferences.getInstance();
       final isTracking = prefs.getBool('is_tracking') ?? false;
+      final isPaused = prefs.getBool('is_paused') ?? false;
 
       if (!isTracking) {
         log('⚠️ Tracking disabled in SharedPreferences, stopping service');
         timer.cancel();
         service.stopSelf();
         return;
+      }
+
+      // Check if job is paused
+      if (isPaused) {
+        log('⏸️ Job is PAUSED - skipping location send');
+        // Update notification to show paused status
+        if (service is AndroidServiceInstance) {
+          final jobName = prefs.getString('tracking_job_name') ?? 'Unknown Job';
+          final pausedAt = prefs.getInt('paused_at');
+          final pausedTime = pausedAt != null
+              ? DateTime.fromMillisecondsSinceEpoch(pausedAt)
+              : DateTime.now();
+          final pauseDuration = DateTime.now().difference(pausedTime);
+          final pauseMinutes = pauseDuration.inMinutes;
+
+          service.setForegroundNotificationInfo(
+            title: '⏸️ $jobName - PAUSED',
+            content: 'Job paused for ${pauseMinutes}m | Location tracking stopped',
+          );
+        }
+        return; // Skip sending location when paused
       }
 
       final jobId = prefs.getInt('tracking_job_id');
@@ -281,7 +321,7 @@ void onStart(ServiceInstance service) async {
         log('   jobId: $jobId');
         log('   userId: $userId');
         log('   deviceId: $deviceId');
-        log('   Skipping this tick, will retry in 15 seconds');
+        log('   Skipping this tick, will retry in 10 seconds');
         return;
       }
 
@@ -324,7 +364,7 @@ void onStart(ServiceInstance service) async {
     }
   });
 
-  log('Timer started - will tick every 15 seconds');
+  log('Timer started - will tick every 10 seconds');
 }
 
 @pragma('vm:entry-point')

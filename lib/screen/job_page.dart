@@ -10,12 +10,15 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'job_details_page.dart';
 import '../models/job.dart';
+import '../models/city.dart';
 import '../helper/dio.dart';
 import '../config/app_colors.dart';
 import '../providers/job_provider.dart';
 import '../services/location_tracking_service.dart';
 import '../services/running_job_manager.dart';
 import '../providers/auth.dart';
+import '../widgets/live_trip_map.dart';
+import 'package:latlong2/latlong.dart';
 
 class JobPage extends StatefulWidget {
   const JobPage({super.key});
@@ -117,26 +120,8 @@ class _JobPageState extends State<JobPage> {
     final deliveriesController = TextEditingController();
 
     // Fetch cities for dropdown
-    List<Map<String, dynamic>> cityList = [];
-    Map<String, dynamic>? selectedCity;
-
-    try {
-      final token = await storage.read(key: 'auth');
-      final cityRes = await dio().get(
-        '/cities',
-        options: dio_lib.Options(headers: {'Authorization': 'Bearer $token'}),
-      );
-      if (cityRes.statusCode == 200 && cityRes.data['cities'] is List) {
-        cityList = (cityRes.data['cities'] as List)
-            .whereType<Map<String, dynamic>>()
-            .toList();
-        if (cityList.isNotEmpty) {
-          selectedCity = cityList.first;
-        }
-      }
-    } catch (e) {
-      log('Error loading cities: $e');
-    }
+    List<City> cityList = await fetchCities();
+    City? selectedCity = cityList.isNotEmpty ? cityList.first : null;
 
     await showDialog(
       context: context,
@@ -192,13 +177,13 @@ class _JobPageState extends State<JobPage> {
                         }
                       },
                     ),
-                    DropdownButtonFormField<Map<String, dynamic>>(
+                    DropdownButtonFormField<City>(
                       value: selectedCity,
                       items: cityList
                           .map(
                             (c) => DropdownMenuItem(
                               value: c,
-                              child: Text(c['name']),
+                              child: Text(c.name),
                             ),
                           )
                           .toList(),
@@ -209,10 +194,50 @@ class _JobPageState extends State<JobPage> {
                       },
                       decoration: InputDecoration(labelText: 'City'),
                     ),
+                    if (job.city != null && job.city!.isNotEmpty)
+                      Container(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Icon(Icons.location_city, size: 16, color: Colors.blue),
+                            SizedBox(width: 8),
+                            Text(
+                              'Started in: ${job.city}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.blue[700],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (job.deliveries > 0)
+                      Container(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Icon(Icons.flag, size: 16, color: Colors.orange),
+                            SizedBox(width: 8),
+                            Text(
+                              'Target: ${job.deliveries} pcs',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.orange[700],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     TextFormField(
                       controller: deliveriesController,
                       decoration: InputDecoration(
-                        labelText: 'Deliveries (pcs)',
+                        labelText: 'Actual Deliveries (pcs)',
+                        hintText: 'Enter actual deliveries completed',
+                        helperText: job.deliveries > 0
+                            ? 'Target was ${job.deliveries} pcs'
+                            : 'Enter total deliveries completed',
                       ),
                       keyboardType: TextInputType.number,
                     ),
@@ -271,9 +296,9 @@ class _JobPageState extends State<JobPage> {
                           'fuel_price': fuelPrice.isNotEmpty
                               ? double.tryParse(fuelPrice)
                               : null,
-                          'deliveries':
+                          'actual_deliveries':
                               deliveries.isNotEmpty ? int.tryParse(deliveries) ?? 0 : 0,
-                          'city_id': selectedCity?['id'],
+                          'city_id': selectedCity?.id,
                           'user_id': userId,
                         };
 
@@ -336,6 +361,28 @@ class _JobPageState extends State<JobPage> {
           .toList();
     }
     return [];
+  }
+
+  /// Fetch cities from API for dropdown
+  Future<List<City>> fetchCities() async {
+    try {
+      final token = await storage.read(key: 'auth');
+      final response = await dio().get(
+        '/cities',
+        options: dio_lib.Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+
+      if (response.statusCode == 200 && response.data['cities'] is List) {
+        return (response.data['cities'] as List)
+            .whereType<Map<String, dynamic>>()
+            .map((city) => City.fromJson(city))
+            .toList();
+      }
+      return [];
+    } catch (e) {
+      log('Error fetching cities: $e');
+      return [];
+    }
   }
 
   Future<void> _getCurrentLocation(Function(String) onLocation) async {
@@ -454,11 +501,11 @@ class _JobPageState extends State<JobPage> {
       List<Map<String, dynamic>> vehicleList = [];
       List<Map<String, dynamic>> vendorList = [];
       List<Map<String, dynamic>> serviceList = [];
-      List<Map<String, dynamic>> cityList = [];
+      List<City> cityList = [];
       Map<String, dynamic>? selectedVehicle;
       Map<String, dynamic>? selectedVendor;
       Map<String, dynamic>? selectedService;
-      Map<String, dynamic>? selectedCity;
+      City? selectedCity;
 
       try {
         final vehicleRes = await dio().get(
@@ -513,23 +560,11 @@ class _JobPageState extends State<JobPage> {
       } catch (e) {
         log('Error loading dropdown data: $e');
       }
-      try {
-        final cityRes = await dio().get(
-          '/cities',
-          options: dio_lib.Options(headers: {'Authorization': 'Bearer $token'}),
-        );
-        if (cityRes.statusCode == 200 && cityRes.data['cities'] is List) {
-          cityList = (cityRes.data['cities'] as List)
-              .whereType<Map<String, dynamic>>()
-              .toList();
-          if (cityList.isNotEmpty) {
-            selectedCity = cityList.first;
-          }
-        }
-        log('Loaded cities: $cityList');
-      } catch (e) {
-        log('Error loading cities: $e');
-      }
+
+      // Fetch cities using reusable method
+      cityList = await fetchCities();
+      selectedCity = cityList.isNotEmpty ? cityList.first : null;
+      log('Loaded cities: ${cityList.length} items');
 
       if (!mounted) return;
 
@@ -595,13 +630,13 @@ class _JobPageState extends State<JobPage> {
                     onChanged: (val) => selectedService = val,
                     decoration: InputDecoration(labelText: 'Service'),
                   ),
-                  DropdownButtonFormField<Map<String, dynamic>>(
+                  DropdownButtonFormField<City>(
                     value: selectedCity,
                     items: cityList
                         .map(
                           (c) => DropdownMenuItem(
                             value: c,
-                            child: Text(c['name']),
+                            child: Text(c.name),
                           ),
                         )
                         .toList(),
@@ -611,7 +646,9 @@ class _JobPageState extends State<JobPage> {
                   TextFormField(
                     controller: deliveriesController,
                     decoration: InputDecoration(
-                      labelText: 'Deliveries (pcs)',
+                      labelText: 'Target Deliveries (pcs)',
+                      hintText: 'Enter target deliveries',
+                      helperText: 'This will be your delivery target',
                     ),
                     keyboardType: TextInputType.number,
                   ),
@@ -661,12 +698,13 @@ class _JobPageState extends State<JobPage> {
                         "service_id": selectedService!['id'],
                         "vehicle_id": selectedVehicle!['id'],
                         "vendor_id": selectedVendor!['id'],
+                        "city_id": selectedCity?.id,
                         "user_id": userId,
                         "start_latlong": _startLatLong ?? "",
                         "end_latlong": _endLatLong ?? "",
                         "is_editable": true,
                         "fuel_consumed": 0.0,
-                        "deliveries": deliveriesController.text.isNotEmpty
+                        "target_deliveries": deliveriesController.text.isNotEmpty
                             ? int.tryParse(deliveriesController.text) ?? 0
                             : 0,
                       };
@@ -704,8 +742,12 @@ class _JobPageState extends State<JobPage> {
                         service: selectedService!['name'],
                         vehicle: selectedVehicle!['name'],
                         vendor: selectedVendor!['name'],
+                        city: selectedCity?.name,
                         fuelPrice: 0.0,
                         fuelConsumption: 0.0,
+                        deliveries: deliveriesController.text.isNotEmpty
+                            ? int.tryParse(deliveriesController.text) ?? 0
+                            : 0,
                       );
 
                       if (mounted) {
@@ -771,12 +813,18 @@ class _JobPageState extends State<JobPage> {
     }
   }
 
-  void _pauseJob() {
+  void _pauseJob() async {
     context.read<JobProvider>().pauseJob();
+    // Pause location tracking service
+    await _locationTrackingService.pauseTracking();
+    log('Job paused - location tracking stopped');
   }
 
-  void _resumeJob() {
+  void _resumeJob() async {
     context.read<JobProvider>().resumeJob();
+    // Resume location tracking service
+    await _locationTrackingService.resumeTracking();
+    log('Job resumed - location tracking restarted');
   }
 
   void _stopJob() async {
@@ -796,27 +844,8 @@ class _JobPageState extends State<JobPage> {
     final deliveriesController = TextEditingController();
 
     // Fetch cities for dropdown
-    List<Map<String, dynamic>> cityList = [];
-    Map<String, dynamic>? selectedCity;
-
-    try {
-      final token = await storage.read(key: 'auth');
-      final cityRes = await dio().get(
-        '/cities',
-        options: dio_lib.Options(headers: {'Authorization': 'Bearer $token'}),
-      );
-      if (cityRes.statusCode == 200 && cityRes.data['cities'] is List) {
-        cityList = (cityRes.data['cities'] as List)
-            .whereType<Map<String, dynamic>>()
-            .toList();
-        if (cityList.isNotEmpty) {
-          selectedCity = cityList.first;
-        }
-      }
-      log('Loaded cities for finish: $cityList');
-    } catch (e) {
-      log('Error loading cities: $e');
-    }
+    List<City> cityList = await fetchCities();
+    City? selectedCity = cityList.isNotEmpty ? cityList.first : null;
 
     await showDialog(
       context: context,
@@ -843,6 +872,24 @@ class _JobPageState extends State<JobPage> {
                   decoration: InputDecoration(labelText: 'Vendor'),
                   enabled: false,
                 ),
+                if (currentJob.city != null && currentJob.city!.isNotEmpty)
+                  Container(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.location_city, size: 16, color: Colors.blue),
+                        SizedBox(width: 8),
+                        Text(
+                          'Started in: ${currentJob.city}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.blue[700],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 TextFormField(
                   initialValue: DateFormat('yyyy-MM-dd HH:mm').format(startTime),
                   decoration: InputDecoration(labelText: 'Started At'),
@@ -853,13 +900,31 @@ class _JobPageState extends State<JobPage> {
                   decoration: InputDecoration(labelText: 'Finished At'),
                   enabled: false,
                 ),
-                DropdownButtonFormField<Map<String, dynamic>>(
+                if (currentJob.deliveries > 0)
+                  Container(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.flag, size: 16, color: Colors.orange),
+                        SizedBox(width: 8),
+                        Text(
+                          'Target: ${currentJob.deliveries} pcs',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.orange[700],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                DropdownButtonFormField<City>(
                   value: selectedCity,
                   items: cityList
                       .map(
                         (c) => DropdownMenuItem(
                           value: c,
-                          child: Text(c['name']),
+                          child: Text(c.name),
                         ),
                       )
                       .toList(),
@@ -869,7 +934,11 @@ class _JobPageState extends State<JobPage> {
                 TextFormField(
                   controller: deliveriesController,
                   decoration: InputDecoration(
-                    labelText: 'Deliveries (pcs)',
+                    labelText: 'Actual Deliveries (pcs)',
+                    hintText: 'Enter actual deliveries completed',
+                    helperText: currentJob.deliveries > 0
+                        ? 'Target was ${currentJob.deliveries} pcs'
+                        : 'Enter total deliveries completed',
                   ),
                   keyboardType: TextInputType.number,
                   enabled: true,
@@ -925,10 +994,10 @@ class _JobPageState extends State<JobPage> {
                         fuelPrice.isNotEmpty
                             ? double.tryParse(fuelPrice)
                             : null,
-                    'deliveries': deliveries.isNotEmpty
+                    'actual_deliveries': deliveries.isNotEmpty
                         ? int.tryParse(deliveries) ?? 0
                         : 0,
-                    'city_id': selectedCity?['id'],
+                    'city_id': selectedCity?.id,
                     'user_id': userId,
                   };
                   log('PUT /runners/$jobId payload: $payload');
@@ -1860,6 +1929,53 @@ class _JobPageState extends State<JobPage> {
     );
   }
 
+  /// Show live trip map in full screen
+  void _showLiveTripMap(JobProvider jobProvider) async {
+    final runningJob = jobProvider.runningJob;
+    final startTime = jobProvider.jobStartTime;
+
+    if (runningJob == null || startTime == null) return;
+
+    // Parse start location
+    LatLng? startPosition;
+    if (runningJob.startLatLong.isNotEmpty) {
+      final parts = runningJob.startLatLong.split(',');
+      if (parts.length == 2) {
+        final lat = double.tryParse(parts[0]);
+        final lng = double.tryParse(parts[1]);
+        if (lat != null && lng != null) {
+          startPosition = LatLng(lat, lng);
+        }
+      }
+    }
+
+    // Show map in dialog
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          insetPadding: EdgeInsets.zero,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text('Live Trip Map - ${runningJob.service}'),
+              backgroundColor: AppColors.appBar,
+              leading: IconButton(
+                icon: Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+            body: LiveTripMap(
+              jobId: runningJob.id,
+              startTime: startTime,
+              startPosition: startPosition,
+              isRunning: true, // Live tracking with is_running=true endpoint
+            ),
+          ),
+        );
+      },
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -2088,79 +2204,135 @@ class _JobPageState extends State<JobPage> {
                 Container(
                   color: AppColors.background,
                   margin: EdgeInsets.all(8),
-                  child: ListTile(
-                    title: Text(
-                      'Current Job: ${jobProvider.runningJob!.service}',
-                      style: TextStyle(color: AppColors.text, fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Started: ${DateFormat('EEE HH:mm').format(jobProvider.jobStartTime!)}',
-                          style: TextStyle(color: AppColors.text),
-                        ),
-                        Text(
-                          'Elapsed: ${jobProvider.getElapsedTimeString()}',
-                          style: TextStyle(color: AppColors.text, fontWeight: FontWeight.bold),
-                        ),
-                        SizedBox(height: 4),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 4,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
+                  padding: EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Job details row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(Icons.directions, color: AppColors.text, size: 16),
-                                SizedBox(width: 4),
                                 Text(
-                                  '${_currentDistance.toStringAsFixed(2)} km',
+                                  'Current Job: ${jobProvider.runningJob!.service}',
                                   style: TextStyle(
                                     color: AppColors.text,
                                     fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Started: ${DateFormat('EEE HH:mm').format(jobProvider.jobStartTime!)}',
+                                  style: TextStyle(color: AppColors.text, fontSize: 13),
+                                ),
+                                Text(
+                                  'Elapsed: ${jobProvider.getElapsedTimeString()}',
+                                  style: TextStyle(
+                                    color: AppColors.text,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
                                   ),
                                 ),
                               ],
                             ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.speed, color: AppColors.text, size: 16),
-                                SizedBox(width: 4),
-                                Text(
-                                  '${_currentSpeed.toStringAsFixed(1)} km/h',
-                                  style: TextStyle(
-                                    color: AppColors.text,
-                                    fontWeight: FontWeight.bold,
+                          ),
+                          SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.directions, color: AppColors.text, size: 16),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    '${_currentDistance.toStringAsFixed(2)} km',
+                                    style: TextStyle(
+                                      color: AppColors.text,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
                                   ),
+                                ],
+                              ),
+                              SizedBox(height: 2),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.speed, color: AppColors.text, size: 16),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    '${_currentSpeed.toStringAsFixed(1)} km/h',
+                                    style: TextStyle(
+                                      color: AppColors.text,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 12),
+                      Divider(height: 1, color: AppColors.text.withValues(alpha: 0.2)),
+                      SizedBox(height: 12),
+                      // Control buttons row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          if (!jobProvider.isPaused)
+                            Expanded(
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange,
+                                  foregroundColor: Colors.white,
                                 ),
-                              ],
+                                onPressed: _pauseJob,
+                                child: Text('Pause'),
+                              ),
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (!jobProvider.isPaused)
-                          ElevatedButton(
-                            onPressed: _pauseJob,
-                            child: Text('Pause'),
+                          if (jobProvider.isPaused)
+                            Expanded(
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: _resumeJob,
+                                child: Text('Resume'),
+                              ),
+                            ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: _stopJob,
+                              child: Text('Stop'),
+                            ),
                           ),
-                        if (jobProvider.isPaused)
-                          ElevatedButton(
-                            onPressed: _resumeJob,
-                            child: Text('Resume'),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              icon: Icon(Icons.map, size: 16),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () => _showLiveTripMap(jobProvider),
+                              label: Text('Map'),
+                            ),
                           ),
-                        SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: _stopJob,
-                          child: Text('Stop'),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               // Live Location Tracking Status Card

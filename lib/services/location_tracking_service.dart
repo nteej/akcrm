@@ -11,15 +11,17 @@ class LocationTrackingService {
   final storage = const FlutterSecureStorage();
   final BackgroundLocationService _backgroundService = BackgroundLocationService();
   bool _isTracking = false;
+  bool _isPaused = false;
 
   bool get isTracking => _isTracking;
+  bool get isPaused => _isPaused;
 
   /// Initialize the service (call once at app start)
   Future<void> initialize() async {
     await _backgroundService.initialize();
   }
 
-  /// Start tracking location with 4 calls per minute (every 15 seconds)
+  /// Start tracking location with 6 calls per minute (every 10 seconds)
   Future<void> startTracking({
     required int jobId,
     required String userId,
@@ -54,9 +56,47 @@ class LocationTrackingService {
     log('Location tracking started successfully');
   }
 
+  /// Pause tracking location (stops sending but keeps tracking active)
+  Future<void> pauseTracking() async {
+    if (!_isTracking || _isPaused) {
+      log('Cannot pause - not tracking or already paused');
+      return;
+    }
+
+    _isPaused = true;
+    log('Location tracking paused');
+
+    // Update pause state in SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_paused', true);
+    final pausedAt = DateTime.now().millisecondsSinceEpoch;
+    await prefs.setInt('paused_at', pausedAt);
+
+    log('Pause state saved: paused_at=$pausedAt');
+  }
+
+  /// Resume tracking location
+  Future<void> resumeTracking() async {
+    if (!_isTracking || !_isPaused) {
+      log('Cannot resume - not tracking or not paused');
+      return;
+    }
+
+    _isPaused = false;
+    log('Location tracking resumed');
+
+    // Update pause state in SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_paused', false);
+    await prefs.remove('paused_at');
+
+    log('Pause state cleared - tracking resumed');
+  }
+
   /// Stop tracking location
   Future<void> stopTracking() async {
     _isTracking = false;
+    _isPaused = false;
 
     // Stop background service
     await _backgroundService.stopTracking();
@@ -89,6 +129,8 @@ class LocationTrackingService {
     await prefs.remove('tracking_user_id');
     await prefs.remove('tracking_device_id');
     await prefs.setBool('is_tracking', false);
+    await prefs.setBool('is_paused', false);
+    await prefs.remove('paused_at');
     log('Tracking state cleared');
   }
 

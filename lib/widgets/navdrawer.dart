@@ -1,6 +1,7 @@
 import '../../screen/job_page.dart';
 import '../../screen/invoice_page.dart';
 import '../../screen/about_page.dart';
+import '../../screen/impersonate_screen.dart';
 import 'package:flutter/material.dart';
 import '../../screen/login_screen.dart';
 import '../../screen/register.dart';
@@ -137,6 +138,40 @@ class _NavDrawerState extends State<NavDrawer> {
                           MaterialPageRoute(builder: ((context) => InvoicePage())),
                         ),
                       ),
+                      // Admin-only impersonation feature
+                      if (auth.isAdmin) ...[
+                        Divider(),
+                        ListTile(
+                          title: Row(
+                            children: [
+                              Text('Impersonate User'),
+                              SizedBox(width: 8),
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'ADMIN',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          leading: Icon(Icons.supervised_user_circle, color: Colors.red),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: ((context) => ImpersonateScreen()),
+                            ),
+                          ),
+                        ),
+                      ],
                       Divider(),
                       ListTile(
                         title: Text('Logout'),

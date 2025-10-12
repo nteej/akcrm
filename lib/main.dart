@@ -11,6 +11,8 @@ import 'screen/home.dart';
 import 'services/location_service.dart';
 import 'services/location_tracking_service.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:finnerp/services/local_notifications_service.dart';
+import 'package:finnerp/services/firebase_messaging_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,8 +20,12 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  final NotificationService notificationService = NotificationService();
-  await notificationService.initFCM();
+  // Initialize background job service
+  final localNotificationsService = LocalNotificationsService.instance();
+  await localNotificationsService.init();
+
+  final firebaseMessagingService = FirebaseMessagingService.instance();
+  await firebaseMessagingService.init(localNotificationsService: localNotificationsService);
 
   runApp(MultiProvider(
     providers: [

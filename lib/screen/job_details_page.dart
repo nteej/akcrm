@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import '../models/job.dart';
 import '../config/app_colors.dart';
+import '../widgets/live_trip_map.dart';
 
 class JobDetailsPage extends StatelessWidget {
   final Job job;
@@ -102,9 +104,66 @@ class JobDetailsPage extends StatelessWidget {
                 Text('$breakMinutes min', style: TextStyle(fontSize: 16, color: AppColors.text)),
               ],
             ),
+            SizedBox(height: 24),
+            // View Route Map button (only for finished jobs with ID)
+            if (job.id != null && job.isFinished)
+              Center(
+                child: ElevatedButton.icon(
+                  icon: Icon(Icons.map, size: 20),
+                  label: Text('View Route Map'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    textStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () => _showRouteMap(context),
+                ),
+              ),
           ],
         ),
       ),
+    );
+  }
+
+  /// Show historical route map for finished job
+  void _showRouteMap(BuildContext context) {
+    // Parse start location
+    LatLng? startPosition;
+    if (job.startLatLong.isNotEmpty) {
+      final parts = job.startLatLong.split(',');
+      if (parts.length == 2) {
+        final lat = double.tryParse(parts[0]);
+        final lng = double.tryParse(parts[1]);
+        if (lat != null && lng != null) {
+          startPosition = LatLng(lat, lng);
+        }
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          insetPadding: EdgeInsets.zero,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text('Route Map - ${job.service}'),
+              backgroundColor: AppColors.appBar,
+              leading: IconButton(
+                icon: Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+            body: LiveTripMap(
+              jobId: job.id!,
+              startTime: job.startTime,
+              startPosition: startPosition,
+              isRunning: false, // Historical route, not live
+            ),
+          ),
+        );
+      },
     );
   }
 }
